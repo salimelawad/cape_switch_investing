@@ -11,6 +11,49 @@ import pandas as pd
 import numpy as np
 import functools
 import math
+from functools import reduce
+import seaborn as sns
+import numpy as np
+import matplotlib.pyplot as plt
+
+def cape_return_mapping(yearly_cape, year_percentage_returns):
+    def extract_cape(country):
+        frame = {'cape': yearly_cape[country], 'return': year_percentage_returns[country]}
+        return pd.DataFrame(frame).dropna() 
+    
+    cape_year = reduce(
+        lambda x, y: x + list(y.itertuples(index=False, name=None)),
+        (map(
+            lambda country: extract_cape(country)
+            , list(yearly_cape.columns)
+        )),
+        []
+    )
+
+    cape_year = pd.DataFrame(cape_year, columns=['cape', 'return'])
+    cape_year['return'] = cape_year['return']
+    corr = cape_year.corr(method='spearman').loc['cape']['return']
+    return cape_year, corr
+
+def multi_year_returns(yearly_returns, years, adjust_yearly=False, adjust_inflation=False, inflation=None): 
+    yearly_returns = yearly_returns.copy(deep=True)
+    if adjust_inflation:
+        yearly_returns['Inflation'] = inflation + 1
+    r = yearly_returns.rolling(years, min_periods=years).aggregate(lambda x: x.prod()).shift(years*(-1)+1).dropna(how='all')
+    if adjust_yearly:
+        adjust_year_func = lambda x: math.exp(math.log(x, math.exp(1))/years)
+        r = r.applymap(adjust_year_func)
+    if adjust_inflation:
+        r = r.apply(lambda x: x/r['Inflation']).drop(['Inflation'], axis=1)
+    return r
+
+def plot_cape_returns(data):
+    sns.set(color_codes=True)
+    fig, ax = plt.subplots(figsize=(25,10)) 
+    ax.set_title('Relationship between country\'s CAPE ratios and 1-year returns', size= 30)
+    ax = sns.regplot(x="cape", y="return", data=data, logx=True)
+    plt.xlabel('CAPE ratio', size=20)
+    plt.ylabel('Returns', size=20)
 
 def ingest_cape_data():
     # Historical CAPE ratios
